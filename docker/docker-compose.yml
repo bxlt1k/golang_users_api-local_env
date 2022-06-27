@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+
+  nginx:
+    build:
+      context: ../
+      dockerfile: ./docker/services/nginx/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4580:80"
+    volumes:
+      - ./services/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./services/nginx/sites-available:/etc/nginx/sites-available
+      - ./services/nginx/logs/users_api:/var/log/nginx/users_api
+    depends_on:
+      - users_api
+    networks:
+      - first
+
+  users_api:
+    build:
+      context: ../
+      dockerfile: ./docker/services/users_api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    volumes:
+      - ../services/users_api:/users_api
+      - ${GOPATH:-../gopath}:/go
+    env_file:
+      - ./services/users_api/.env
+    depends_on:
+      - first_mysql
+    networks:
+      - first
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8081:80"
+    restart: on-failure
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOST=first_mysql
+    depends_on:
+      - first_mysql
+    networks:
+      - first
+
+  first_mysql:
+    image: mysql:latest
+    container_name: first_mysql
+    ports:
+      - "3306:3306"
+    restart: on-failure
+    env_file:
+      - ./services/mysql/.env
+    volumes:
+      - ./services/mysql/data:/var/lib/mysql
+    networks:
+      - first
+
+  mysql_init:
+    build:
+      context: ../
+      dockerfile: ./docker/services/mysql/init/Dockerfile
+    restart: on-failure
+    depends_on:
+      - first_mysql
+    networks:
+      - first
+
+networks:
+  first:
+    driver: bridge
